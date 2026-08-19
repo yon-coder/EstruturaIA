@@ -61,6 +61,15 @@ def gerar_curriculo(numero: int, pasta: Path, rng: random.Random) -> Path:
 	return destino
 
 
+def gerar_curriculo_texto(numero: int, rng: random.Random) -> dict:
+	"""Retorna a representação estruturada usada para testes sem criar PDF."""
+	nome = rng.choice(NOMES)
+	area = rng.choice(list(AREAS))
+	habilidades = rng.sample(AREAS[area], len(AREAS[area]))
+	return {"Candidato": nome, "Área": area, "Habilidades": habilidades,
+			"Texto": f"Profissional fictício de {area}. Habilidades: {', '.join(habilidades)}."}
+
+
 def main() -> None:
 	parser = argparse.ArgumentParser(description="Gera currículos PDF sintéticos")
 	parser.add_argument("--quantidade", type=int, default=1, help="número de PDFs (1-1000)")

@@ -6,6 +6,7 @@ Dependências: pip install streamlit pypdf pandas plotly
 from __future__ import annotations
 
 import re
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -41,11 +42,15 @@ def analisar_curriculo(caminho: Path) -> dict:
 		r"(?:•|\n)\s*([^\n•]+)", texto[inicio:fim if fim >= 0 else None]
 	)
 	habilidades = [item.strip() for item in habilidades if item.strip()]
+	# Mantém o mesmo critério simples usado pela interface HTML.
+	score = min(100, 40 + len(habilidades) * 10)
 	return {
 		"Candidato": nome,
 		"Área": area,
 		"Pontos fortes": ", ".join(habilidades),
+		"Habilidades": habilidades,
 		"Quantidade de habilidades": len(habilidades),
+		"Score de recomendação": score,
 		"Arquivo": caminho.name,
 	}
 
@@ -74,13 +79,24 @@ def main() -> None:
 	colunas = st.columns(3)
 	colunas[0].metric("Candidatos", len(exibidos))
 	colunas[1].metric("Habilidades extraídas", int(exibidos["Quantidade de habilidades"].sum()))
-	colunas[2].metric("Média por candidato", f"{exibidos['Quantidade de habilidades'].mean():.1f}")
+	colunas[2].metric("Score médio", f"{exibidos['Score de recomendação'].mean():.0f}/100")
 
 	st.subheader("Pontos fortes por candidato")
-	st.dataframe(exibidos[["Candidato", "Área", "Pontos fortes"]], hide_index=True, use_container_width=True)
+	st.dataframe(exibidos[["Candidato", "Área", "Score de recomendação", "Pontos fortes"]], hide_index=True, use_container_width=True)
+	st.subheader("Dados para a futura interface HTML")
+	st.caption("Exportação estruturada para alimentar uma página HTML ou uma API de treinamento.")
+	registros = exibidos[["Candidato", "Área", "Habilidades", "Score de recomendação", "Arquivo"]].to_dict(orient="records")
+	st.download_button(
+		"Baixar dados estruturados (JSON)",
+		json.dumps(registros, ensure_ascii=False, indent=2).encode("utf-8"),
+		"curriculos_treinamento.json",
+		"application/json",
+	)
 	st.subheader("Comparativo de habilidades")
 	grafico = exibidos[["Candidato", "Quantidade de habilidades"]].set_index("Candidato")
 	st.bar_chart(grafico)
+	st.subheader("Score de recomendação")
+	st.bar_chart(exibidos[["Candidato", "Score de recomendação"]].set_index("Candidato"))
 	st.download_button("Baixar análise CSV", exibidos.to_csv(index=False).encode("utf-8"),
 					   "analise_curriculos.csv", "text/csv")
 

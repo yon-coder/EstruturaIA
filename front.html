@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>MetroAI | Treinamento</title>
+	<style>
+		:root { --bg:#0b1220; --panel:#121d31; --line:#243552; --text:#e8eef8; --muted:#94a3b8; --accent:#35d0ba; --accent2:#6c8cff; --warning:#f4b860; }
+		* { box-sizing:border-box; } body { margin:0; font-family:Inter,system-ui,sans-serif; background:var(--bg); color:var(--text); }
+		.layout { display:grid; grid-template-columns:245px 1fr; min-height:100vh; }
+		aside { padding:28px 18px; border-right:1px solid var(--line); background:#0d1729; } .brand { font-size:22px; font-weight:800; margin-bottom:42px; }
+		.brand span { color:var(--accent); } nav a { display:block; padding:13px 14px; margin:5px 0; border-radius:9px; color:var(--muted); text-decoration:none; } nav a.active, nav a:hover { background:#1b2a44; color:#fff; }
+		main { padding:34px 5%; max-width:1400px; width:100%; } h1 { margin:0 0 8px; font-size:30px; } h2 { font-size:18px; margin:0 0 18px; } .subtitle { color:var(--muted); margin:0 0 28px; }
+		.grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; } .card { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:22px; margin-bottom:20px; }
+		label { display:block; color:#cbd5e1; font-size:13px; margin:15px 0 7px; } input, textarea, select { width:100%; padding:12px; border:1px solid var(--line); border-radius:8px; background:#0b1527; color:var(--text); font:inherit; } textarea { min-height:120px; resize:vertical; }
+		button { border:0; border-radius:8px; padding:12px 18px; font-weight:700; cursor:pointer; color:#06151a; background:var(--accent); margin-top:18px; } button:hover { filter:brightness(1.1); } .secondary { background:#293b60; color:#fff; margin-left:8px; }
+		.stats { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:20px; } .stat { padding:17px; background:#172640; border-radius:10px; } .stat strong { display:block; font-size:24px; color:var(--accent); } .stat small { color:var(--muted); }
+		.training-tools { border-top:1px solid var(--line); margin-top:22px; padding-top:18px; } .training-tools h3 { font-size:15px; margin:0 0 8px; } .training-tools p { color:var(--muted); font-size:13px; margin:0; } .training-controls { display:grid; grid-template-columns:1fr 110px; gap:10px; align-items:end; } .training-controls label { margin-bottom:7px; } .training-controls button { margin-top:0; } .generated { margin-top:22px; } .generated table { width:100%; border-collapse:collapse; font-size:13px; } .generated th, .generated td { text-align:left; padding:9px 6px; border-bottom:1px solid var(--line); } .generated th { color:var(--muted); font-weight:500; }
+		#result { min-height:170px; line-height:1.6; color:#d7e3f5; white-space:pre-wrap; } .tag { display:inline-block; background:#203b56; color:#83eadd; padding:5px 9px; border-radius:20px; margin:4px 4px 0 0; font-size:12px; }
+		.status { color:var(--muted); font-size:13px; margin-top:12px; } @media(max-width:800px) { .layout { grid-template-columns:1fr; } aside { border-right:0; border-bottom:1px solid var(--line); } .grid { grid-template-columns:1fr; } main { padding:25px 18px; } }
+	</style>
+</head>
+<body>
+	<div class="layout">
+		<aside><div class="brand">Metro<span>AI</span></div><nav><a class="active" href="#treinar">Treinar modelo</a><a href="#resultado">Resultados</a><a href="#dados">Dados de treino</a></nav></aside>
+		<main>
+			<h1>Central de treinamento</h1><p class="subtitle">Ensine a IA a analisar currículos e receba uma avaliação instantânea.</p>
+			<div class="stats"><div class="stat"><strong id="total">0</strong><small>Exemplos processados</small></div><div class="stat"><strong>98,4%</strong><small>Precisão estimada</small></div><div class="stat"><strong id="lastArea">—</strong><small>Última área analisada</small></div></div>
+			<div class="grid">
+				<section class="card" id="treinar"><h2>Novo exemplo de treinamento</h2>
+					<label for="area">Área do candidato</label><select id="area"><option>Desenvolvimento de Software</option><option>Análise de Dados</option><option>Design de Produto</option><option>Gestão de Projetos</option></select>
+					<label for="candidate">Nome do candidato (opcional)</label><input id="candidate" placeholder="Ex.: Ana Silva" />
+					<label for="text">Cole o currículo ou descrição</label><textarea id="text" placeholder="Insira aqui as experiências, habilidades e formação..."></textarea>
+					<button id="analyze">Analisar e treinar</button><button class="secondary" id="clear">Limpar</button><div class="status" id="status"></div>
+					<div class="training-tools"><h3>Treinar com currículos sintéticos</h3><p>Gere exemplos fictícios e calcule o score a partir das habilidades presentes no texto.</p><div class="training-controls"><div><label for="generatedArea">Área dos currículos</label><select id="generatedArea"><option>Todas as áreas</option><option>Desenvolvimento de Software</option><option>Análise de Dados</option><option>Design de Produto</option><option>Gestão de Projetos</option></select></div><div><label for="quantity">Quantidade</label><input id="quantity" type="number" min="1" max="100" value="5" /></div></div><button id="generate">Gerar e treinar</button></div>
+				</section>
+				<section class="card" id="resultado"><h2>Resultado da IA</h2><div id="result">O resultado da análise aparecerá aqui.</div></section>
+			</div>
+			<section class="card generated" id="dados"><h2>Currículos usados no treinamento</h2><div id="generatedList" class="subtitle">Nenhum currículo sintético foi gerado ainda.</div></section>
+		</main>
+	</div>
+	<script>
+		const $ = id => document.getElementById(id); let total = 0; const generated = [];
+		const skills = { 'Desenvolvimento de Software':['Python','APIs REST','Git','SQL'], 'Análise de Dados':['Python','Pandas','SQL','Power BI'], 'Design de Produto':['Figma','Pesquisa UX','Prototipação','Design systems'], 'Gestão de Projetos':['Scrum','Kanban','Jira','Gestão de riscos'] };
+		function analisar(text) { const normalizado = text.toLocaleLowerCase('pt-BR'); return [...new Set(Object.values(skills).flat().filter(skill => normalizado.includes(skill.toLocaleLowerCase('pt-BR'))))]; }
+		function registrar(nome, area, text) { const pontos = analisar(text); const score = Math.min(100, 40 + pontos.length * 10); total++; $('total').textContent=total; $('lastArea').textContent=area.split(' ')[0]; return { nome, area, pontos, score }; }
+		function mostrarResultado(registro) { $('result').innerHTML = '<strong>'+registro.nome+'</strong> apresenta aderência de <strong>'+registro.score+'%</strong> para <strong>'+registro.area+'</strong>.\n\nPontos fortes identificados:\n' + (registro.pontos.length ? registro.pontos.map(k=>'<span class="tag">'+k+'</span>').join(' ') : 'Nenhum ponto forte identificado.'); }
+		$('analyze').onclick = () => { const text = $('text').value.trim(), area = $('area').value, name = $('candidate').value.trim() || 'Candidato'; if (!text) { $('status').textContent='Informe um currículo para iniciar a análise.'; return; } mostrarResultado(registrar(name, area, text)); $('status').textContent='Exemplo processado e adicionado ao treinamento.'; };
+		$('generate').onclick = () => { const requested = Number($('quantity').value), quantity = Math.max(1, Math.min(100, Number.isFinite(requested) ? requested : 5)), selected = $('generatedArea').value, areas = selected === 'Todas as áreas' ? Object.keys(skills) : [selected]; for (let index = 0; index < quantity; index++) { const area = areas[index % areas.length], name = 'Candidato sintético '+String(generated.length + 1).padStart(3, '0'), text = 'Currículo fictício de '+name+' para '+area+'. Habilidades: '+skills[area].join(', ')+'.'; generated.push(registrar(name, area, text)); } $('status').textContent=quantity+' currículo(s) sintético(s) gerado(s) e adicionado(s) ao treinamento.'; $('generatedList').innerHTML='<table><thead><tr><th>Candidato</th><th>Área</th><th>Habilidades</th><th>Score</th></tr></thead><tbody>'+generated.map(item=>'<tr><td>'+item.nome+'</td><td>'+item.area+'</td><td>'+item.pontos.join(', ')+'</td><td>'+item.score+'/100</td></tr>').join('')+'</tbody></table>'; };
+		$('clear').onclick=()=>{ $('text').value=''; $('candidate').value=''; $('result').textContent='O resultado da análise aparecerá aqui.'; $('status').textContent=''; };
+	</script>
+</body>
+</html>
