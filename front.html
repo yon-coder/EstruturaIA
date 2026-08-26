@@ -89,6 +89,9 @@
 		#result { min-height: 170px; line-height: 1.6; color: #d7e3f5; white-space: pre-wrap; }
 		.tag { display: inline-block; background: #203b56; color: #83eadd; padding: 5px 9px; border-radius: 20px; margin: 4px 4px 0 0; font-size: 12px; }
 		.status { color: var(--muted); font-size: 13px; margin-top: 12px; }
+		.generated-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+		.generated-actions button { margin-top: 0; }
+		.empty { color: var(--muted); }
 
 		@media (max-width: 800px) {
 			.layout { grid-template-columns: 1fr; }
@@ -114,20 +117,26 @@
 				</section>
 				<section class="card" id="resultado"><h2>Resultado da IA</h2><div id="result">O resultado da análise aparecerá aqui.</div></section>
 			</div>
-			<section class="card generated" id="dados"><h2>Currículos usados no treinamento</h2><div id="generatedList" class="subtitle">Nenhum currículo sintético foi gerado ainda.</div></section>
+			<section class="card generated" id="dados"><h2>Currículos usados no treinamento</h2><div id="generatedList" class="subtitle">Nenhum currículo sintético foi gerado ainda.</div><div class="generated-actions"><button class="secondary" id="exportData">Exportar dados</button><button class="secondary" id="clearData">Apagar dados salvos</button></div></section>
 		</main>
 	</div>
 	<script>
-		const $ = id => document.getElementById(id); let total = 0; const generated = [];
+		const $ = id => document.getElementById(id); const storageKey = 'metroai-training-v1'; let total = 0; const generated = [];
 		const skills = { 'Desenvolvimento de Software':['Python','APIs REST','Git','SQL'], 'Análise de Dados':['Python','Pandas','SQL','Power BI'], 'Design de Produto':['Figma','Pesquisa UX','Prototipação','Design systems'], 'Gestão de Projetos':['Scrum','Kanban','Jira','Gestão de riscos'] };
 		const aliases = { 'APIs REST':['api','rest'], 'Pesquisa UX':['ux','pesquisa com usuários'], 'Design systems':['design system'], 'Gestão de riscos':['riscos','risk management'] };
 		function normalizar(text) { return text.toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
 		function analisar(text, area) { const normalizado = normalizar(text); return skills[area].filter(skill => [skill,...(aliases[skill] || [])].some(term => normalizado.includes(normalizar(term)))); }
-		function registrar(nome, area, text) { const pontos = analisar(text, area), totalSkills = skills[area].length; const score = Math.round(Math.min(100, Math.max(8, 18 + pontos.length / totalSkills * 82))); total++; $('total').textContent=total; $('lastArea').textContent=area.split(' ')[0]; return { nome, area, pontos, score }; }
+		function salvar() { localStorage.setItem(storageKey, JSON.stringify({ total, generated })); }
+		function registrar(nome, area, text) { const pontos = analisar(text, area), totalSkills = skills[area].length; const score = Math.round(Math.min(100, Math.max(8, 18 + pontos.length / totalSkills * 82 + (Math.random() * 13 - 6)))); total++; $('total').textContent=total; $('lastArea').textContent=area.split(' ')[0]; salvar(); return { nome, area, pontos, score }; }
 		function mostrarResultado(registro) { $('result').innerHTML = '<strong>'+registro.nome+'</strong> apresenta aderência de <strong>'+registro.score+'%</strong> para <strong>'+registro.area+'</strong>.\n\nPontos fortes identificados:\n' + (registro.pontos.length ? registro.pontos.map(k=>'<span class="tag">'+k+'</span>').join(' ') : 'Nenhum ponto forte identificado.'); }
+		function renderizarLista() { $('total').textContent=total; if (!generated.length) { $('generatedList').innerHTML='<span class="empty">Nenhum currículo sintético foi gerado ainda.</span>'; return; } $('generatedList').innerHTML='<table><thead><tr><th>Candidato</th><th>Área</th><th>Habilidades</th><th>Score</th></tr></thead><tbody>'+generated.map(item=>'<tr><td>'+item.nome+'</td><td>'+item.area+'</td><td>'+item.pontos.join(', ')+'</td><td>'+item.score+'/100</td></tr>').join('')+'</tbody></table>'; }
+		function carregar() { try { const saved=JSON.parse(localStorage.getItem(storageKey)); if (saved) { total=Number(saved.total)||0; generated.push(...(Array.isArray(saved.generated)?saved.generated:[])); renderizarLista(); if (generated.length) $('lastArea').textContent=generated[generated.length-1].area.split(' ')[0]; } } catch (error) { localStorage.removeItem(storageKey); } }
 		$('analyze').onclick = () => { const text = $('text').value.trim(), area = $('area').value, name = $('candidate').value.trim() || 'Candidato'; if (!text) { $('status').textContent='Informe um currículo para iniciar a análise.'; return; } mostrarResultado(registrar(name, area, text)); $('status').textContent='Exemplo processado e adicionado ao treinamento.'; };
-		$('generate').onclick = () => { const requested = Number($('quantity').value), quantity = Math.max(1, Math.min(100, Number.isFinite(requested) ? requested : 5)), selected = $('generatedArea').value, areas = selected === 'Todas as áreas' ? Object.keys(skills) : [selected]; for (let index = 0; index < quantity; index++) { const area = areas[index % areas.length], name = 'Candidato sintético '+String(generated.length + 1).padStart(3, '0'), text = 'Currículo fictício de '+name+' para '+area+'. Habilidades: '+skills[area].join(', ')+'.'; generated.push(registrar(name, area, text)); } $('status').textContent=quantity+' currículo(s) sintético(s) gerado(s) e adicionado(s) ao treinamento.'; $('generatedList').innerHTML='<table><thead><tr><th>Candidato</th><th>Área</th><th>Habilidades</th><th>Score</th></tr></thead><tbody>'+generated.map(item=>'<tr><td>'+item.nome+'</td><td>'+item.area+'</td><td>'+item.pontos.join(', ')+'</td><td>'+item.score+'/100</td></tr>').join('')+'</tbody></table>'; };
+		$('generate').onclick = () => { const requested = Number($('quantity').value), quantity = Math.max(1, Math.min(100, Number.isFinite(requested) ? Math.floor(requested) : 5)), selected = $('generatedArea').value, areas = selected === 'Todas as áreas' ? Object.keys(skills) : [selected]; for (let index = 0; index < quantity; index++) { const area = areas[Math.floor(Math.random()*areas.length)], name = 'Candidato sintético '+String(generated.length + 1).padStart(3, '0'), selectedSkills = skills[area].filter(()=>Math.random() > .28); if (!selectedSkills.length) selectedSkills.push(skills[area][Math.floor(Math.random()*skills[area].length)]); const text = 'Currículo fictício de '+name+' para '+area+'. Habilidades: '+selectedSkills.join(', ')+'.'; generated.push(registrar(name, area, text)); } renderizarLista(); $('status').textContent=quantity+' currículo(s) sintético(s) gerado(s) e adicionado(s) ao treinamento.'; };
 		$('clear').onclick=()=>{ $('text').value=''; $('candidate').value=''; $('result').textContent='O resultado da análise aparecerá aqui.'; $('status').textContent=''; };
+		$('clearData').onclick=()=>{ if(confirm('Apagar todos os dados salvos?')) { total=0; generated.length=0; localStorage.removeItem(storageKey); $('lastArea').textContent='—'; renderizarLista(); $('status').textContent='Dados locais apagados.'; } };
+		$('exportData').onclick=()=>{ const blob=new Blob([JSON.stringify({ total, generated }, null, 2)], {type:'application/json'}), link=document.createElement('a'); link.href=URL.createObjectURL(blob); link.download='metroai-dados.json'; link.click(); URL.revokeObjectURL(link.href); };
+		carregar();
 	</script>
 </body>
 </html>

@@ -1,2 +1,3 @@
 Portifólios_treino/curriculo_sintetico_*.pdf
-__pycache__/*.pyc
+__pycache__/
+Portifólios_treino/__pycache__/
