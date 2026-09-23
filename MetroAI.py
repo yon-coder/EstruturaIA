@@ -9,6 +9,7 @@ import re
 import json
 from importlib import import_module
 from pathlib import Path
+from typing import Any
 
 
 def _importar_dependencia(nome: str):
@@ -66,7 +67,7 @@ def analisar_curriculo(caminho: Path) -> dict:
 
 
 @st.cache_data
-def carregar_curriculos(pasta: str) -> pd.DataFrame:
+def carregar_curriculos(pasta: str) -> Any:
 	arquivos = sorted(Path(pasta).glob("*.pdf"))
 	return pd.DataFrame([analisar_curriculo(arquivo) for arquivo in arquivos])
 
