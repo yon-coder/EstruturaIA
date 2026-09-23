@@ -7,15 +7,25 @@ from __future__ import annotations
 
 import re
 import json
+from importlib import import_module
 from pathlib import Path
 
-import pandas as pd
-import streamlit as st
 
-try:
-	from pypdf import PdfReader
-except ImportError as exc:  # pragma: no cover
-	raise SystemExit("Instale as dependências: pip install streamlit pypdf pandas plotly") from exc
+def _importar_dependencia(nome: str):
+	"""Carrega dependências opcionais em tempo de execução."""
+	try:
+		return import_module(nome)
+	except ImportError as exc:  # pragma: no cover
+		raise SystemExit(
+			"Instale as dependências: pip install streamlit pypdf pandas plotly"
+		) from exc
+
+
+# Evita falsos positivos do analisador quando o ambiente do editor não tem
+# as dependências instaladas; o Streamlit continua sendo carregado normalmente.
+pd = _importar_dependencia("pandas")
+st = _importar_dependencia("streamlit")
+PdfReader = _importar_dependencia("pypdf").PdfReader
 
 
 PASTA_CURRICULOS = Path(__file__).resolve().parent / "Portifólios_treino"
