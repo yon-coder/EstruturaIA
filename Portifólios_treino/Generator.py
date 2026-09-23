@@ -5,13 +5,12 @@ import random
 from pathlib import Path
 
 try:
-	from reportlab.lib.pagesizes import A4
-	from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-	from reportlab.lib.units import cm
-	from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+    from reportlab.lib.pagesizes import A4  # type: ignore[import-not-found]
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet  # type: ignore[import-not-found]
+    from reportlab.lib.units import cm  # type: ignore[import-not-found]
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer  # type: ignore[import-not-found]
 except ImportError as exc:
-	raise SystemExit("Instale a dependência com: pip install reportlab") from exc
-
+    raise SystemExit("Instale a dependência com: pip install reportlab") from exc
 
 NOMES = ["Ana Silva", "Bruno Costa", "Carla Mendes", "Diego Santos", "Elisa Rocha"]
 AREAS = {
