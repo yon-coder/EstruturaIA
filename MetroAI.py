@@ -12,6 +12,9 @@ from pathlib import Path
 from typing import Any
 
 
+
+
+
 def _importar_dependencia(nome: str):
 	"""Carrega dependências opcionais em tempo de execução."""
 	try:
