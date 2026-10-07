@@ -7,12 +7,12 @@ que será posteriormente integrada ao repositório principal.
 
 ## Objetivo
 
-A solução deverá:
+A API:
 
 1. Receber portfólios ou currículos em PDF;
 2. Extrair e transformar o conteúdo em texto estruturado;
 3. Analisar as informações relevantes;
-4. Gerar um score para apoiar a avaliação dos candidatos.
+4. Gerar um relatório e um score heurístico para apoiar a avaliação dos candidatos.
 
 ## Dados de treino sintéticos
 
@@ -49,6 +49,32 @@ python Portifólios_treino/Generator.py --quantidade 10 --seed 42
 
 `--quantidade` aceita valores de 1 a 1000. Os PDFs são salvos na própria pasta
 `Portifólios_treino/`.
+
+## API de análise
+
+Instale as dependências da API e inicie o servidor:
+
+```bash
+pip install -r requirements.txt
+uvicorn MetroAI:app --reload
+```
+
+A documentação interativa fica em `http://127.0.0.1:8000/docs`.
+
+- `GET /health`: verifica se a API está disponível.
+- `POST /analisar`: recebe um currículo PDF no campo multipart `arquivo` e retorna candidato, área, habilidades, relatório e score.
+- `GET /relatorios`: analisa os PDFs de `Portifólios_treino/` e retorna os relatórios, a média dos scores e os arquivos que falharam.
+
+Exemplo de análise de um arquivo:
+
+```bash
+curl -X POST http://127.0.0.1:8000/analisar \
+	-F "arquivo=@curriculo.pdf"
+```
+
+O score atual é uma regra de demonstração: 40 pontos base e 10 pontos por
+habilidade encontrada na seção `HABILIDADES`, limitado a 100. Ele não mede
+aderência real à vaga e não deve ser usado como decisão automática de contratação.
 
 ## Interface HTML
 
@@ -101,7 +127,6 @@ e `risk management`. A normalização remove diferenças de maiúsculas e acento
 
 ## Próximas etapas
 
-- Implementar a extração de texto dos PDFs;
-- Definir os critérios e pesos do score;
+- Refinar os critérios e pesos do score com dados avaliados;
 - Criar testes automatizados com os dados sintéticos;
 - Integrar o modelo ao projeto principal do MetroForm.

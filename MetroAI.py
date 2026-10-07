@@ -1,35 +1,20 @@
-"""Dashboard de análise dos currículos sintéticos gerados pelo Generator.py.
-
-Execute com: streamlit run MetroAI.py
-Dependências: pip install streamlit pypdf pandas plotly
-"""
+"""API para análise de currículos em PDF. Execute com uvicorn MetroAI:app --reload."""
 from __future__ import annotations
 
 import re
-import json
-from importlib import import_module
+from io import BytesIO
 from pathlib import Path
-from typing import Any
+
+from fastapi import FastAPI, File, HTTPException, UploadFile
+from pypdf import PdfReader
 
 
-
-
-
-def _importar_dependencia(nome: str):
-	"""Carrega dependências opcionais em tempo de execução."""
-	try:
-		return import_module(nome)
-	except ImportError as exc:  # pragma: no cover
-		raise SystemExit(
-			"Instale as dependências: pip install streamlit pypdf pandas plotly"
-		) from exc
-
-
-# Evita falsos positivos do analisador quando o ambiente do editor não tem
-# as dependências instaladas; o Streamlit continua sendo carregado normalmente.
-pd = _importar_dependencia("pandas")
-st = _importar_dependencia("streamlit")
-PdfReader = _importar_dependencia("pypdf").PdfReader
+TAMANHO_MAXIMO_PDF = 10 * 1024 * 1024
+app = FastAPI(
+	title="MetroAI — API de análise de currículos",
+	description="Extrai habilidades, gera um relatório e calcula um score para currículos PDF.",
+	version="1.0.0",
+)
 
 
 PASTA_CURRICULOS = Path(__file__).resolve().parent / "Portifólios_treino"
@@ -44,11 +29,14 @@ def extrair_texto(caminho: Path) -> str:
 
 
 def analisar_curriculo(caminho: Path) -> dict:
-	texto = extrair_texto(caminho)
+	return analisar_texto(extrair_texto(caminho), caminho.name)
+
+
+def analisar_texto(texto: str, arquivo: str) -> dict:
 	linhas = [linha.strip() for linha in texto.splitlines() if linha.strip()]
 	nome = next((linha for linha in linhas if linha in {
 		"Ana Silva", "Bruno Costa", "Carla Mendes", "Diego Santos", "Elisa Rocha"
-	}), caminho.stem)
+	}), Path(arquivo).stem)
 	area = next((item for item in AREAS if item in texto), "Não identificada")
 	inicio = texto.find("HABILIDADES")
 	fim = texto.find("AVISO", inicio)
@@ -56,8 +44,12 @@ def analisar_curriculo(caminho: Path) -> dict:
 		r"(?:•|\n)\s*([^\n•]+)", texto[inicio:fim if fim >= 0 else None]
 	)
 	habilidades = [item.strip() for item in habilidades if item.strip()]
-	# Mantém o mesmo critério simples usado pela interface HTML.
 	score = min(100, 40 + len(habilidades) * 10)
+	resumo = (
+		f"{nome}: área {area}. Foram identificadas {len(habilidades)} habilidades: "
+		f"{', '.join(habilidades) if habilidades else 'nenhuma habilidade na seção HABILIDADES'}. "
+		f"Score de recomendação: {score}/100."
+	)
 	return {
 		"Candidato": nome,
 		"Área": area,
@@ -65,55 +57,51 @@ def analisar_curriculo(caminho: Path) -> dict:
 		"Habilidades": habilidades,
 		"Quantidade de habilidades": len(habilidades),
 		"Score de recomendação": score,
-		"Arquivo": caminho.name,
+		"Relatório": resumo,
+		"Critério do score": "40 pontos base + 10 por habilidade identificada, limitado a 100.",
+		"Arquivo": arquivo,
 	}
 
 
-@st.cache_data
-def carregar_curriculos(pasta: str) -> Any:
-	arquivos = sorted(Path(pasta).glob("*.pdf"))
-	return pd.DataFrame([analisar_curriculo(arquivo) for arquivo in arquivos])
+@app.get("/health")
+def verificar_saude() -> dict:
+	return {"status": "ok"}
 
 
-def main() -> None:
-	st.set_page_config(page_title="MetroAI — Currículos", page_icon="📄", layout="wide")
-	st.title("📄 MetroAI — pontos fortes dos candidatos")
-	pasta = st.sidebar.text_input("Pasta dos currículos", str(PASTA_CURRICULOS))
+@app.post("/analisar")
+def analisar_upload(arquivo: UploadFile = File(...)) -> dict:
+	if not arquivo.filename or Path(arquivo.filename).suffix.lower() != ".pdf":
+		raise HTTPException(status_code=415, detail="Envie um arquivo com extensão .pdf.")
+
+	conteudo = arquivo.file.read(TAMANHO_MAXIMO_PDF + 1)
+	if len(conteudo) > TAMANHO_MAXIMO_PDF:
+		raise HTTPException(status_code=413, detail="O PDF deve ter no máximo 10 MB.")
+
 	try:
-		dados = carregar_curriculos(pasta)
+		texto = "\n".join(
+			pagina.extract_text() or "" for pagina in PdfReader(BytesIO(conteudo)).pages
+		)
 	except Exception as erro:
-		st.error(f"Não foi possível ler os PDFs: {erro}")
-		return
-	if dados.empty:
-		st.warning("Nenhum currículo PDF encontrado na pasta informada.")
-		return
-
-	areas = st.sidebar.multiselect("Filtrar por área", sorted(dados["Área"].unique()))
-	exibidos = dados[dados["Área"].isin(areas)] if areas else dados
-	colunas = st.columns(3)
-	colunas[0].metric("Candidatos", len(exibidos))
-	colunas[1].metric("Habilidades extraídas", int(exibidos["Quantidade de habilidades"].sum()))
-	colunas[2].metric("Score médio", f"{exibidos['Score de recomendação'].mean():.0f}/100")
-
-	st.subheader("Pontos fortes por candidato")
-	st.dataframe(exibidos[["Candidato", "Área", "Score de recomendação", "Pontos fortes"]], hide_index=True, use_container_width=True)
-	st.subheader("Dados para a futura interface HTML")
-	st.caption("Exportação estruturada para alimentar uma página HTML ou uma API de treinamento.")
-	registros = exibidos[["Candidato", "Área", "Habilidades", "Score de recomendação", "Arquivo"]].to_dict(orient="records")
-	st.download_button(
-		"Baixar dados estruturados (JSON)",
-		json.dumps(registros, ensure_ascii=False, indent=2).encode("utf-8"),
-		"curriculos_treinamento.json",
-		"application/json",
-	)
-	st.subheader("Comparativo de habilidades")
-	grafico = exibidos[["Candidato", "Quantidade de habilidades"]].set_index("Candidato")
-	st.bar_chart(grafico)
-	st.subheader("Score de recomendação")
-	st.bar_chart(exibidos[["Candidato", "Score de recomendação"]].set_index("Candidato"))
-	st.download_button("Baixar análise CSV", exibidos.to_csv(index=False).encode("utf-8"),
-					   "analise_curriculos.csv", "text/csv")
+		raise HTTPException(status_code=422, detail="Não foi possível ler o PDF.") from erro
+	if not texto.strip():
+		raise HTTPException(status_code=422, detail="O PDF não contém texto extraível.")
+	return analisar_texto(texto, Path(arquivo.filename).name)
 
 
-if __name__ == "__main__":
-	main()
+@app.get("/relatorios")
+def gerar_relatorios() -> dict:
+	relatorios = []
+	erros = []
+	for caminho in sorted(PASTA_CURRICULOS.glob("*.pdf")):
+		try:
+			relatorios.append(analisar_curriculo(caminho))
+		except Exception:
+			erros.append(caminho.name)
+
+	scores = [registro["Score de recomendação"] for registro in relatorios]
+	return {
+		"total_curriculos": len(relatorios),
+		"score_medio": round(sum(scores) / len(scores), 2) if scores else 0,
+		"relatorios": relatorios,
+		"arquivos_com_erro": erros,
+	}
