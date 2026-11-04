@@ -2,3 +2,4 @@ Portifólios_treino/curriculo_sintetico_*.pdf
 .venv/
 __pycache__/
 Portifólios_treino/__pycache__/
+.env

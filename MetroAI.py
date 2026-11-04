@@ -1,107 +1,149 @@
-"""API para análise de currículos em PDF. Execute com uvicorn MetroAI:app --reload."""
 from __future__ import annotations
 
-import re
+import json
+import os
 from io import BytesIO
 from pathlib import Path
+from typing import List
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+import google.generativeai as genai
+from dotenv import load_dotenv
+from fastapi import FastAPI, File, HTTPException, UploadFile, status
+from pydantic import BaseModel, Field
 from pypdf import PdfReader
 
+# --- Configuração do Ambiente e Gemini ---
+# Carrega as variáveis do arquivo .env
+load_dotenv()
 
+CHAVE_API = os.environ.get("GEMINI_API_KEY")
+if not CHAVE_API:
+    raise ValueError("A chave GEMINI_API_KEY não foi encontrada no arquivo .env")
+
+genai.configure(api_key=CHAVE_API)
+modelo_gemini = genai.GenerativeModel("gemini-1.5-flash")
+
+# Constantes (10 MB)
 TAMANHO_MAXIMO_PDF = 10 * 1024 * 1024
+PASTA_CURRICULOS = Path(__file__).resolve().parent / "Portifólios_treino"
+
 app = FastAPI(
-	title="MetroAI — API de análise de currículos",
-	description="Extrai habilidades, gera um relatório e calcula um score para currículos PDF.",
-	version="1.0.0",
+    title="MetroAI — API de Análise de Currículos",
+    description="Extrai habilidades, gera relatórios e calcula o score usando IA do Gemini.",
+    version="1.1.1",
 )
 
+class AnaliseCurriculoResponse(BaseModel):
+    candidato: str = Field(..., alias="Candidato")
+    area: str = Field(..., alias="Área")
+    pontos_fortes: str = Field(..., alias="Pontos fortes")
+    habilidades: List[str] = Field(..., alias="Habilidades")
+    quantidade_habilidades: int = Field(..., alias="Quantidade de habilidades")
+    score_recomendacao: int = Field(..., alias="Score de recomendação")
+    relatorio: str = Field(..., alias="Relatório")
+    criterio_score: str = Field(..., alias="Critério do score")
+    arquivo: str = Field(..., alias="Arquivo")
 
-PASTA_CURRICULOS = Path(__file__).resolve().parent / "Portifólios_treino"
-AREAS = [
-	"Desenvolvimento de Software", "Análise de Dados", "Design de Produto",
-	"Gestão de Projetos",
-]
+    class Config:
+        populate_by_name = True
 
+class RelatoriosLoteResponse(BaseModel):
+    total_curriculos: int
+    score_medio: float
+    relatorios: List[AnaliseCurriculoResponse]
+    arquivos_com_erro: List[str]
 
-def extrair_texto(caminho: Path) -> str:
-	return "\n".join((pagina.extract_text() or "") for pagina in PdfReader(str(caminho)).pages)
-
-
-def analisar_curriculo(caminho: Path) -> dict:
-	return analisar_texto(extrair_texto(caminho), caminho.name)
-
+def extrair_texto(caminho_ou_stream: Path | BytesIO) -> str:
+    try:
+        reader = PdfReader(caminho_ou_stream)
+        texto = "\n".join((pagina.extract_text() or "") for pagina in reader.pages)
+        return texto
+    except Exception as erro:
+        raise ValueError("Não foi possível ler a estrutura do arquivo PDF.") from erro
 
 def analisar_texto(texto: str, arquivo: str) -> dict:
-	linhas = [linha.strip() for linha in texto.splitlines() if linha.strip()]
-	nome = next((linha for linha in linhas if linha in {
-		"Ana Silva", "Bruno Costa", "Carla Mendes", "Diego Santos", "Elisa Rocha"
-	}), Path(arquivo).stem)
-	area = next((item for item in AREAS if item in texto), "Não identificada")
-	inicio = texto.find("HABILIDADES")
-	fim = texto.find("AVISO", inicio)
-	habilidades = [] if inicio < 0 else re.findall(
-		r"(?:•|\n)\s*([^\n•]+)", texto[inicio:fim if fim >= 0 else None]
-	)
-	habilidades = [item.strip() for item in habilidades if item.strip()]
-	score = min(100, 40 + len(habilidades) * 10)
-	resumo = (
-		f"{nome}: área {area}. Foram identificadas {len(habilidades)} habilidades: "
-		f"{', '.join(habilidades) if habilidades else 'nenhuma habilidade na seção HABILIDADES'}. "
-		f"Score de recomendação: {score}/100."
-	)
-	return {
-		"Candidato": nome,
-		"Área": area,
-		"Pontos fortes": ", ".join(habilidades),
-		"Habilidades": habilidades,
-		"Quantidade de habilidades": len(habilidades),
-		"Score de recomendação": score,
-		"Relatório": resumo,
-		"Critério do score": "40 pontos base + 10 por habilidade identificada, limitado a 100.",
-		"Arquivo": arquivo,
-	}
+    prompt = f"""
+    Leia o seguinte currículo e extraia os dados principais.
+    Retorne APENAS um objeto JSON válido com as seguintes chaves:
+    - "Candidato": Nome do candidato (ou "Não identificado").
+    - "Área": Área de atuação principal (ex: "Desenvolvimento", "Design", etc).
+    - "Habilidades": Uma lista (array) de strings com as ferramentas, tecnologias ou competências citadas.
 
+    Texto do currículo:
+    {texto}
+    """
 
-@app.get("/health")
-def verificar_saude() -> dict:
-	return {"status": "ok"}
+    try:
+        resposta = modelo_gemini.generate_content(
+            prompt,
+            generation_config={"response_mime_type": "application/json"}
+        )
+        dados = json.loads(resposta.text)
+        nome = dados.get("Candidato", Path(arquivo).stem)
+        area = dados.get("Área", "Não identificada")
+        habilidades = dados.get("Habilidades", [])
+    except Exception:
+        nome = Path(arquivo).stem
+        area = "Erro na leitura da IA"
+        habilidades = []
 
+    score = min(100, 40 + len(habilidades) * 10)
+    resumo = (
+        f"{nome}: área {area}. Foram identificadas {len(habilidades)} habilidades: "
+        f"{', '.join(habilidades) if habilidades else 'nenhuma habilidade extraída'}. "
+        f"Score de recomendação: {score}/100."
+    )
 
-@app.post("/analisar")
-def analisar_upload(arquivo: UploadFile = File(...)) -> dict:
-	if not arquivo.filename or Path(arquivo.filename).suffix.lower() != ".pdf":
-		raise HTTPException(status_code=415, detail="Envie um arquivo com extensão .pdf.")
+    return {
+        "Candidato": nome,
+        "Área": area,
+        "Pontos fortes": ", ".join(habilidades),
+        "Habilidades": habilidades,
+        "Quantidade de habilidades": len(habilidades),
+        "Score de recomendação": score,
+        "Relatório": resumo,
+        "Critério do score": "40 pontos base + 10 por habilidade identificada, limitado a 100.",
+        "Arquivo": arquivo,
+    }
 
-	conteudo = arquivo.file.read(TAMANHO_MAXIMO_PDF + 1)
-	if len(conteudo) > TAMANHO_MAXIMO_PDF:
-		raise HTTPException(status_code=413, detail="O PDF deve ter no máximo 10 MB.")
+def analisar_curriculo(caminho: Path) -> dict:
+    texto = extrair_texto(caminho)
+    return analisar_texto(texto, caminho.name)
 
-	try:
-		texto = "\n".join(
-			pagina.extract_text() or "" for pagina in PdfReader(BytesIO(conteudo)).pages
-		)
-	except Exception as erro:
-		raise HTTPException(status_code=422, detail="Não foi possível ler o PDF.") from erro
-	if not texto.strip():
-		raise HTTPException(status_code=422, detail="O PDF não contém texto extraível.")
-	return analisar_texto(texto, Path(arquivo.filename).name)
+@app.get("/health", status_code=status.HTTP_200_OK)
+async def verificar_saude() -> dict[str, str]:
+    return {"status": "ok"}
 
+@app.post("/analisar", response_model=AnaliseCurriculoResponse, status_code=status.HTTP_200_OK)
+async def analisar_upload(arquivo: UploadFile = File(...)) -> dict:
+    if not arquivo.filename or Path(arquivo.filename).suffix.lower() != ".pdf":
+        raise HTTPException(status_code=415, detail="Envie um arquivo .pdf.")
+    conteudo = await arquivo.read()
+    if len(conteudo) > TAMANHO_MAXIMO_PDF:
+        raise HTTPException(status_code=413, detail="Máximo de 10 MB.")
+    try:
+        texto = extrair_texto(BytesIO(conteudo))
+    except ValueError as erro:
+        raise HTTPException(status_code=422, detail=str(erro)) from erro
+    if not texto.strip():
+        raise HTTPException(status_code=422, detail="PDF sem texto.")
+    
+    return analisar_texto(texto, Path(arquivo.filename).name)
 
-@app.get("/relatorios")
-def gerar_relatorios() -> dict:
-	relatorios = []
-	erros = []
-	for caminho in sorted(PASTA_CURRICULOS.glob("*.pdf")):
-		try:
-			relatorios.append(analisar_curriculo(caminho))
-		except Exception:
-			erros.append(caminho.name)
-
-	scores = [registro["Score de recomendação"] for registro in relatorios]
-	return {
-		"total_curriculos": len(relatorios),
-		"score_medio": round(sum(scores) / len(scores), 2) if scores else 0,
-		"relatorios": relatorios,
-		"arquivos_com_erro": erros,
-	}
+@app.get("/relatorios", response_model=RelatoriosLoteResponse, status_code=status.HTTP_200_OK)
+async def gerar_relatorios() -> dict:
+    if not PASTA_CURRICULOS.exists():
+        PASTA_CURRICULOS.mkdir(parents=True, exist_ok=True)
+    relatorios, erros = [], []
+    for caminho in sorted(PASTA_CURRICULOS.glob("*.pdf")):
+        try:
+            relatorios.append(analisar_curriculo(caminho))
+        except Exception:
+            erros.append(caminho.name)
+    scores = [r["Score de recomendação"] for r in relatorios]
+    return {
+        "total_curriculos": len(relatorios),
+        "score_medio": round(sum(scores) / len(scores), 2) if scores else 0.0,
+        "relatorios": relatorios,
+        "arquivos_com_erro": erros,
+    }
