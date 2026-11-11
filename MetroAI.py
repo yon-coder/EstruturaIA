@@ -35,20 +35,21 @@ modelo_gemini = genai.GenerativeModel("gemini-1.5-flash")
 TAMANHO_MAXIMO_PDF = 10 * 1024 * 1024
 PASTA_CURRICULOS = Path(__file__).resolve().parent / "Portifólios_treino"
 
-# --- Configuração de Rate Limiting (Passo 4) ---
+# --- Configuração de Rate Limiting ---
 limiter = Limiter(key_func=get_remote_address)
 
 app = FastAPI(
     title="MetroAI — API de Análise de Currículos",
     description="API assíncrona com IA para análise de currículos e match de vagas.",
-    version="2.0.0",
+    version="2.1.0",
 )
+
 # Adicionando o handler do limitador de requisições no FastAPI
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
-# --- Modelos Pydantic (Atualizados para o Passo 2) ---
+# --- Modelos Pydantic ---
 class AnaliseCurriculoResponse(BaseModel):
     candidato: str = Field(..., alias="Candidato")
     area: str = Field(..., alias="Área")
@@ -62,6 +63,7 @@ class AnaliseCurriculoResponse(BaseModel):
 
     class Config:
         populate_by_name = True
+
 
 class RelatoriosLoteResponse(BaseModel):
     total_curriculos: int
@@ -79,10 +81,8 @@ def extrair_texto(caminho_ou_stream: Path | BytesIO) -> str:
         logger.error("Falha ao extrair texto do PDF.", exc_info=True)
         raise ValueError("Não foi possível ler a estrutura do arquivo PDF.") from erro
 
-# Passo 1 (Async) e Passo 2 (Match de Vagas) aplicados aqui
+
 async def analisar_texto(texto: str, arquivo: str, descricao_vaga: Optional[str] = None) -> dict:
-    
-    # Adapta a instrução da IA dependendo se o RH enviou uma vaga ou não
     if descricao_vaga:
         contexto_score = f"Calcule o 'Score' (0 a 100) estritamente baseado na aderência entre o currículo e esta vaga: {descricao_vaga}"
         criterio = "Match percentual com a descrição da vaga fornecida."
@@ -106,7 +106,6 @@ async def analisar_texto(texto: str, arquivo: str, descricao_vaga: Optional[str]
     """
 
     try:
-        # Chamada Assíncrona, não bloqueia o servidor!
         resposta = await modelo_gemini.generate_content_async(
             prompt,
             generation_config={"response_mime_type": "application/json"}
@@ -135,8 +134,8 @@ async def analisar_texto(texto: str, arquivo: str, descricao_vaga: Optional[str]
         "Arquivo": arquivo,
     }
 
+
 async def analisar_curriculo(caminho: Path) -> dict:
-    # Como a leitura de disco é rápida e o pypdf é síncrono, rodamos direto.
     texto = extrair_texto(caminho)
     return await analisar_texto(texto, caminho.name)
 
@@ -148,9 +147,9 @@ async def verificar_saude() -> dict[str, str]:
 
 
 @app.post("/analisar", response_model=AnaliseCurriculoResponse, status_code=status.HTTP_200_OK)
-@limiter.limit("10/minute") # Passo 4: Limita a 10 requisições por minuto por IP
+@limiter.limit("10/minute")
 async def analisar_upload(
-    request: Request, # Obrigatório para o limitador de taxa funcionar
+    request: Request,
     arquivo: UploadFile = File(...),
     descricao_vaga: Optional[str] = Form(None, description="Descrição da vaga para cálculo de Match")
 ) -> dict:
@@ -177,16 +176,22 @@ async def analisar_upload(
 
 
 @app.get("/relatorios", response_model=RelatoriosLoteResponse, status_code=status.HTTP_200_OK)
-@limiter.limit("2/minute") # Limite rigoroso pois processamento em lote custa caro
+@limiter.limit("2/minute")
 async def gerar_relatorios(request: Request) -> dict:
+    # CORREÇÃO PARA AMBIENTE SERVERLESS:
+    # A criação de pasta (mkdir) foi removida, pois sistemas serverless são "Read-Only".
     if not PASTA_CURRICULOS.exists():
-        PASTA_CURRICULOS.mkdir(parents=True, exist_ok=True)
+        return {
+            "total_curriculos": 0,
+            "score_medio": 0.0,
+            "relatorios": [],
+            "arquivos_com_erro": []
+        }
     
     arquivos_pdf = list(PASTA_CURRICULOS.glob("*.pdf"))
     relatorios = []
     erros = []
     
-    # Processa múltiplos PDFs simultaneamente via asyncio.gather (Muito mais rápido!)
     resultados = await asyncio.gather(*(analisar_curriculo(c) for c in arquivos_pdf), return_exceptions=True)
     
     for caminho, resultado in zip(arquivos_pdf, resultados):
