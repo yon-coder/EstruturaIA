@@ -105,7 +105,7 @@ e `risk management`. A normalização remove diferenças de maiúsculas e acento
 
 ## Update logs
 
-### 2025-02-14 — Atualização da interface e do treinamento local
+### 2026-09-14 — Atualização da interface e do treinamento local
 
 - Adicionado o dashboard de treinamento em `front.html`, com navegação entre
 	treinamento, resultados e dados.
@@ -119,7 +119,7 @@ e `risk management`. A normalização remove diferenças de maiúsculas e acento
 - Incluídos armazenamento local, listagem dos dados gerados, exportação JSON e
 	limpeza dos dados persistidos.
 
-### 2025-02-14 — Documentação
+### 2026-09-25 — Documentação
 
 - README ajustado para refletir as funcionalidades atuais de `front.html`.
 - Documentadas as áreas, habilidades, limites da geração e comportamento do
