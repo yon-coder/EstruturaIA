@@ -14,8 +14,8 @@ def test_health_check():
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
 
-# O @patch substitui a chamada real do Gemini por uma função fantasma (AsyncMock)
-@patch("MetroAI.modelo_gemini.generate_content_async", new_callable=AsyncMock)
+# O @patch substitui a chamada real à OpenAI por uma resposta simulada.
+@patch("MetroAI.cliente_openai.responses.create", new_callable=AsyncMock)
 @patch("MetroAI.extrair_texto")
 def test_analisar_upload_com_vaga(mock_extrair, mock_gemini):
     """Testa o endpoint de upload enviando uma descrição de vaga."""
@@ -23,9 +23,9 @@ def test_analisar_upload_com_vaga(mock_extrair, mock_gemini):
     # 1. Dizemos para o nosso teste fingir que extraiu este texto do PDF
     mock_extrair.return_value = "Desenvolvedor Sênior com 10 anos de Python e AWS."
     
-    # 2. Criamos a resposta falsa (Mock) simulando o que o Gemini devolveria
+    # 2. Criamos uma resposta falsa simulando o retorno da OpenAI.
     class MockRespostaIA:
-        text = '{"Candidato": "Carlos", "Área": "TI", "Habilidades": ["Python", "AWS"], "Score": 95, "Justificativa": "Excelente match."}'
+        output_text = '{"Candidato": "Carlos", "Área": "TI", "Habilidades": ["Python", "AWS"], "Score": 95, "Justificativa": "Excelente match."}'
     
     mock_gemini.return_value = MockRespostaIA()
 

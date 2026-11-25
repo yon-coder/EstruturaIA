@@ -59,6 +59,18 @@ pip install -r requirements.txt
 uvicorn MetroAI:app --reload
 ```
 
+Configure a variável `OPENAI_API_KEY` antes de iniciar a API. Para desenvolvimento
+local, crie um arquivo `.env` (já ignorado pelo Git) com:
+
+```env
+OPENAI_API_KEY=sua_chave_da_openai
+# Opcional; o padrão econômico é gpt-6-luna
+OPENAI_MODEL=gpt-6-luna
+```
+
+O segredo não deve ser colocado no código nem enviado ao repositório. Sem a chave,
+`/health` continua disponível, mas os endpoints de análise retornam HTTP 503.
+
 A documentação interativa fica em `http://127.0.0.1:8000/docs`.
 
 - `GET /health`: verifica se a API está disponível.
@@ -72,9 +84,9 @@ curl -X POST http://127.0.0.1:8000/analisar \
 	-F "arquivo=@curriculo.pdf"
 ```
 
-O score atual é uma regra de demonstração: 40 pontos base e 10 pontos por
-habilidade encontrada na seção `HABILIDADES`, limitado a 100. Ele não mede
-aderência real à vaga e não deve ser usado como decisão automática de contratação.
+O endpoint de análise usa o modelo configurado para estimar aderência ao currículo
+ou à vaga informada. O resultado é uma estimativa de IA e não deve ser usado como
+decisão automática de contratação.
 
 ## Interface HTML
 
