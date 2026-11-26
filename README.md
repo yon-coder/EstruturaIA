@@ -74,19 +74,25 @@ O segredo não deve ser colocado no código nem enviado ao repositório. Sem a c
 A documentação interativa fica em `http://127.0.0.1:8000/docs`.
 
 - `GET /health`: verifica se a API está disponível.
-- `POST /analisar`: recebe um currículo PDF no campo multipart `arquivo` e retorna candidato, área, habilidades, relatório e score.
-- `GET /relatorios`: analisa os PDFs de `Portifólios_treino/` e retorna os relatórios, a média dos scores e os arquivos que falharam.
+- `POST /analisar`: recebe um currículo PDF no campo multipart `arquivo` e retorna informações extraídas, resumo e evidências dos critérios de revisão.
+- `GET /relatorios`: analisa os PDFs de `Portifólios_treino/` e retorna os relatórios e os arquivos que falharam.
 
 Exemplo de análise de um arquivo:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/analisar \
-	-F "arquivo=@curriculo.pdf"
+	-F "arquivo=@curriculo.pdf" \
+	-F "criterios_revisao=AWS, Bacharelado em Engenharia de Software"
 ```
 
-O endpoint de análise usa o modelo configurado para estimar aderência ao currículo
-ou à vaga informada. O resultado é uma estimativa de IA e não deve ser usado como
-decisão automática de contratação.
+A análise local é o modo padrão: identifica informações presentes no texto e cria
+um resumo objetivo. `criterios_revisao` recebe termos separados por vírgula e apenas
+destaca se há evidência textual para cada um deles. Não há score, ranking ou
+recomendação de contratação.
+
+Para usar a OpenAI apenas como complemento de resumo, envie também
+`usar_ia=true`. Caso não haja créditos ou a API esteja indisponível, a análise local
+continua sendo retornada.
 
 ## Interface HTML
 

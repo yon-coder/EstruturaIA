@@ -1,56 +1,55 @@
-import pytest
-from fastapi.testclient import TestClient
-from unittest.mock import patch, AsyncMock
 from io import BytesIO
+from unittest.mock import AsyncMock, patch
 
-# Importa a sua API
-from MetroAI import app 
+from fastapi.testclient import TestClient
+
+from MetroAI import analisar_localmente, analisar_texto, app
+
 
 client = TestClient(app)
 
+
 def test_health_check():
-    """Testa se a API está online."""
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
 
-# O @patch substitui a chamada real à OpenAI por uma resposta simulada.
-@patch("MetroAI.cliente_openai.responses.create", new_callable=AsyncMock)
-@patch("MetroAI.extrair_texto")
-def test_analisar_upload_com_vaga(mock_extrair, mock_gemini):
-    """Testa o endpoint de upload enviando uma descrição de vaga."""
-    
-    # 1. Dizemos para o nosso teste fingir que extraiu este texto do PDF
-    mock_extrair.return_value = "Desenvolvedor Sênior com 10 anos de Python e AWS."
-    
-    # 2. Criamos uma resposta falsa simulando o retorno da OpenAI.
-    class MockRespostaIA:
-        output_text = '{"Candidato": "Carlos", "Área": "TI", "Habilidades": ["Python", "AWS"], "Score": 95, "Justificativa": "Excelente match."}'
-    
-    mock_gemini.return_value = MockRespostaIA()
 
-    # 3. Disparamos a requisição de teste para a nossa própria API
-    pdf_falso = BytesIO(b"%PDF-1.4 Mocked content")
-    response = client.post(
-        "/analisar",
-        files={"arquivo": ("curriculo_carlos.pdf", pdf_falso, "application/pdf")},
-        data={"descricao_vaga": "Preciso de especialista em Python e Nuvem (AWS)"}
-    )
+def test_analise_local_extrai_evidencias_sem_nota():
+    texto = """Carlos Silva
+    Desenvolvedor de Software
+    Experiência: atuou na Empresa Exemplo com APIs REST e AWS.
+    Formação: Bacharelado em Engenharia de Software.
+    Habilidades: Python, SQL, Docker, Git e Java.
+    """
 
-    # 4. Verificamos se as regras de negócio funcionaram
-    assert response.status_code == 200
-    dados = response.json()
-    
-    assert dados["Candidato"] == "Carlos"
-    assert dados["Score"] == 95
-    assert "Match percentual" in dados["Critério do score"]
+    dados = analisar_localmente(texto, "curriculo_carlos.pdf", "Bacharelado em Engenharia de Software, AWS")
+
+    assert dados["Candidato"] == "Carlos Silva"
+    assert dados["Área"] == "Desenvolvimento de Software"
+    assert {"Python", "AWS", "Docker", "Git", "Java"}.issubset(dados["Habilidades"])
+    assert dados["Critérios observados"] == [
+        "Evidência encontrada para: Bacharelado em Engenharia de Software",
+        "Evidência encontrada para: AWS",
+    ]
+    assert "Score" not in dados
 
 def test_analisar_upload_extensao_invalida():
-    """Garante que a API rejeita arquivos que não sejam PDF."""
-    arquivo_falso = BytesIO(b"conteudo de imagem")
     response = client.post(
         "/analisar",
-        files={"arquivo": ("foto.jpg", arquivo_falso, "image/jpeg")}
+        files={"arquivo": ("foto.jpg", BytesIO(b"conteudo de imagem"), "image/jpeg")},
     )
     assert response.status_code == 415
     assert "Envie um arquivo .pdf" in response.json()["detail"]
+
+
+@patch("MetroAI.cliente_openai.responses.create", new_callable=AsyncMock)
+def test_mantem_resultado_local_quando_resumo_ia_falha(mock_openai):
+    mock_openai.side_effect = RuntimeError("sem créditos")
+
+    import asyncio
+
+    dados = asyncio.run(analisar_texto("Ana Lima\nHabilidades: Python e SQL", "ana.pdf", usar_ia=True))
+
+    assert dados["Fonte do resumo"] == "Análise local; resumo por IA indisponível."
+    assert "Python" in dados["Habilidades"]
